@@ -1,0 +1,49 @@
+E1 — Web no accesible a través del proxy
+
+	Sintoma:
+	Al revisar los logs de nginx, nginx mostraba el error: host not found in upstream "backend:5000"
+	Ademas el checker mostraba que la web no era accesible a traves del proxy
+
+	Diagnostico:
+	La causa era que en la configuracion de nginx se intentaba enviar el trafico de la api al host backend:5000,
+	pero no existe ningun servicio llamado asi, el servicio real es api.
+
+	Solucion:
+	Se ha modificado la configuracion de nginx, sustituyendo backend:5000 por api:5000
+
+	Concepto de SSOO:
+	El error esta relacionado con redes en contenedores y la configuracion de un proxy inverso
+
+E2 — API no conecta con la base de datos
+
+	Sintoma:
+	Al revisar los logs de api este aparecia "killed", luego "getaddrinfo ENOTFOUND db" y finalmente "NOAUTH Authentication required"
+
+	Diagnostico:
+	El problema tenia varias causas, el primero era que api tenia un limite de memoria demasiado bajo y el proceso era terminado
+	Despues la api y redis estaban en redes distintas por lo que no se podia resolver el nombre db
+	Finalmente redis exigia contraseña pero la api usaba la variable "REDIS_PASS" mientras que en el archivo docker-compose.yml
+	estaba definida como "REDIS_PASSWORD"
+
+	Solucion:
+	Primero se aumento el limite de memoria de api luego se conecto a la red backend y para terminar se cambio la variable de
+	"REDIT_PASSWORD" a "REDIS_PASS"
+
+	Concepto de SSOO:
+	Gestion de memoria, limite de recursos en contenedores, redes virtuales Docker, variables de entorno y comunicacion cliente-servidor
+
+E3 — Catálogo de canciones accesible
+
+	Sintoma:
+	La ruta de la api encargada de listar las canciones no devolvia correctamente las 5 canciones
+
+	Diagnostico:
+	Por culpa del error "E2" api no podia conectarse ni autenticarse contra Redis y por tanto no podia leer las canciones. Redis es 
+	el almacen donde se guardan las canciones.
+
+	Solucion:
+	Al corregir el problema de api, este se pudo conectar a Redis y leer las canciones que este contenia.
+
+	Concepto de SSOO:
+	Comunicacion entre procesos distribuidos, persistencia de datos en un servicio externo y arquitectura cliente-servidor
+ 
