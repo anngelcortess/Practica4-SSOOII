@@ -63,7 +63,7 @@ E4 — Streaming de audio falla
 	ya que este era ./music:music y el correcto es ./music:/data/music
 
 	Concepto de SSOO:
-	Sistemas de ficheros, montaje de volumenes y acceso de ficheros desde contenedores.
+	Sistemas de ficheros, montaje de volumenes y acceso de ficheros desde contenedores
 
 E5 — Contenedor API estable
 
@@ -77,7 +77,7 @@ E5 — Contenedor API estable
 	Se modifico el limite de memoria aumentandolo a 256MB. Despues se volvio a contruir la imagen y reiniciar los servicios
 
 	Concepto de SSOO:
-	Gestion de memoria y limite de recursos en contenedores.
+	Gestion de memoria y limite de recursos en contenedores
 
 E6 — Imagen no optimizada
 
@@ -93,8 +93,53 @@ E6 — Imagen no optimizada
 	el usuario node mediante USER node
 
 	Concepto de SSOO:
-	Aislamiento de procesos, privilegios, usuarios, permisos y optimizacion de imagenes de contenedores.
+	Aislamiento de procesos, privilegios, usuarios, permisos y optimizacion de imagenes de contenedores
 
 E7 — Healthcheck operativo
 
 	Sintoma: 
+	Al principio el healthcheck de la api no era operativo ya que la api no se mantenia estable y no podia verificar correctamente la
+	conexion con redis. Por lo tanto el servicio no podia considerarse sano
+
+	Diagnostico:
+	El /api/health de la api realiza una comprobacion mediante redis.ping(). Por tanto si la api no estaba viva, no podia resolver el servicio
+	db o si fallaba la autenticacion con redis, el healthcheck devolvia error
+
+	Solucion:
+	Al corregir la configuracion de la api, aumentando su memoria y configurando correctamente REDIS_PASS, el /api/health empezo a devolver el
+	estado ok
+
+	Concepto de SSOO:
+	Supervision de procesos, comprobacion de disponibilidad y gestion del ciclo de vida de servicios
+
+E8 — Worker inestable
+
+	Sintoma:
+	El checker indicaba que el worker tenia varios reinicios y que era inestable
+
+	Diagnostico:
+	La causa era un limite de memoria demasiado bajo en el contenedor worker. Se habia configurado con un limite de 10m, la cual era una 
+	cantidad insuficiente y al superar ese limite el proceso era finalizado
+
+	Solucion:
+	Se aumento el limite de memoria de 10MB a 128MB en docker-compose.yml. Despues se volvio a contruir y lanzar los contenedores
+
+	Concepto se SSOO:
+	Gestion de memoria, limite de recuros en contenedores y supervision de procesos
+
+E9 — Arranque no resiliente
+
+	Sintoma:
+	El checker indicaba arranque no resilente. Aunque los servicios arrancaban correctamente, era posible de que api y worker no esperaran 
+	a que redis estuviera preparado antes de intentar conectarse
+
+	Diagnostico:
+	En docker compose, depends_on solo garantiza el orden de creacion de contenedores, pero no que el servicio dependiente este listo para
+	aceptar conexiones. Por tanto api y worker podian arrancar antes de que db estuviera operativo
+
+	Solucion:
+	Se añadio un healthcheck en db, despues se modificaron los servicios api y worker para depender de db con condicion: service_healthy y 
+	finalmente se recrearon los contenedores
+
+	Concepto de SSOO:
+	Orquetacion de servicios, dependencias entre procesos, disponiblidad de servicios, healthcheck y orden de arranque
