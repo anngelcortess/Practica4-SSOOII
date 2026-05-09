@@ -1,145 +1,154 @@
-E1 — Web no accesible a través del proxy
+FASE 1 - DIAGNOSTICO
 
-	Sintoma:
-	Al revisar los logs de nginx, nginx mostraba el error: host not found in upstream "backend:5000"
-	Ademas el checker mostraba que la web no era accesible a traves del proxy
+	E1 — Web no accesible a través del proxy
 
-	Diagnostico:
-	La causa era que en la configuracion de nginx se intentaba enviar el trafico de la api al host backend:5000,
-	pero no existe ningun servicio llamado asi, el servicio real es api.
+		Sintoma:
+		Al revisar los logs de nginx, nginx mostraba el error: host not found in upstream "backend:5000"
+		Ademas el checker mostraba que la web no era accesible a traves del proxy
 
-	Solucion:
-	Se ha modificado la configuracion de nginx, sustituyendo backend:5000 por api:5000
+		Diagnostico:
+		La causa era que en la configuracion de nginx se intentaba enviar el trafico de la api al host backend:5000,
+		pero no existe ningun servicio llamado asi, el servicio real es api.
 
-	Concepto de SSOO:
-	El error esta relacionado con redes en contenedores y la configuracion de un proxy inverso
+		Solucion:
+		Se ha modificado la configuracion de nginx, sustituyendo backend:5000 por api:5000
 
-E2 — API no conecta con la base de datos
+		Concepto de SSOO:
+		El error esta relacionado con redes en contenedores y la configuracion de un proxy inverso
 
-	Sintoma:
-	Al revisar los logs de api este aparecia "killed", luego "getaddrinfo ENOTFOUND db" y finalmente "NOAUTH Authentication required"
+	E2 — API no conecta con la base de datos
 
-	Diagnostico:
-	El problema tenia varias causas, el primero era que api tenia un limite de memoria demasiado bajo y el proceso era terminado
-	Despues la api y redis estaban en redes distintas por lo que no se podia resolver el nombre db
-	Finalmente redis exigia contraseña pero la api usaba la variable "REDIS_PASS" mientras que en el archivo docker-compose.yml
-	estaba definida como "REDIS_PASSWORD"
+		Sintoma:
+		Al revisar los logs de api este aparecia "killed", luego "getaddrinfo ENOTFOUND db" y finalmente "NOAUTH Authentication required"
 
-	Solucion:
-	Primero se aumento el limite de memoria de api luego se conecto a la red backend y para terminar se cambio la variable de
-	"REDIT_PASSWORD" a "REDIS_PASS"
+		Diagnostico:
+		El problema tenia varias causas, el primero era que api tenia un limite de memoria demasiado bajo y el proceso era terminado
+		Despues la api y redis estaban en redes distintas por lo que no se podia resolver el nombre db
+		Finalmente redis exigia contraseña pero la api usaba la variable "REDIS_PASS" mientras que en el archivo docker-compose.yml
+		estaba definida como "REDIS_PASSWORD"
 
-	Concepto de SSOO:
-	Gestion de memoria, limite de recursos en contenedores, redes virtuales Docker, variables de entorno y comunicacion cliente-servidor
+		Solucion:
+		Primero se aumento el limite de memoria de api luego se conecto a la red backend y para terminar se cambio la variable de
+		"REDIT_PASSWORD" a "REDIS_PASS"
 
-E3 — Catálogo de canciones accesible
+		Concepto de SSOO:
+		Gestion de memoria, limite de recursos en contenedores, redes virtuales Docker, variables de entorno y comunicacion cliente-servidor
 
-	Sintoma:
-	La ruta de la api encargada de listar las canciones no devolvia correctamente las 5 canciones
+	E3 — Catálogo de canciones accesible
 
-	Diagnostico:
-	Por culpa del error "E2" api no podia conectarse ni autenticarse contra Redis y por tanto no podia leer las canciones. Redis es 
-	el almacen donde se guardan las canciones.
+		Sintoma:
+		La ruta de la api encargada de listar las canciones no devolvia correctamente las 5 canciones
 
-	Solucion:
-	Al corregir el problema de api, este se pudo conectar a Redis y leer las canciones que este contenia.
+		Diagnostico:
+		Por culpa del error "E2" api no podia conectarse ni autenticarse contra Redis y por tanto no podia leer las canciones. Redis es 
+		el almacen donde se guardan las canciones.
 
-	Concepto de SSOO:
-	Comunicacion entre procesos distribuidos, persistencia de datos en un servicio externo y arquitectura cliente-servidor
- 
-E4 — Streaming de audio falla
+		Solucion:
+		Al corregir el problema de api, este se pudo conectar a Redis y leer las canciones que este contenia.
 
-	Sintoma:
-	El catalogo de canciones era accesible, pero al probar el streaming de audio el servidor respondia con HTTP 404. Al comprobar
-	/data/music dentro del contenedor, el nombre de los ficheros no coincidian.
+		Concepto de SSOO:
+		Comunicacion entre procesos distribuidos, persistencia de datos en un servicio externo y arquitectura cliente-servidor
+	 
+	E4 — Streaming de audio falla
 
-	Diagnostico:
-	El problema era la inconsistencia de los datos almacenados en Redis y los ficheros reales, ya que en el directorio /data/music 
-	existian los ficheros pero con otros nombres. Por tanto api encontraba la cancion pero no los ficheros fisicos para reproducirlos
+		Sintoma:
+		El catalogo de canciones era accesible, pero al probar el streaming de audio el servidor respondia con HTTP 404. Al comprobar
+		/data/music dentro del contenedor, el nombre de los ficheros no coincidian.
 
-	Solucion:
-	Se vacio redis y se reinicio la api para que ejecutara de nuevo el proceso de auto-seed. Este proceso apunta al directorio
-	/data/music y relleno la nueva lista con los ficheros que si existen. Ademas tuvimos que cambiar el volumen en el que estaba montado
-	ya que este era ./music:music y el correcto es ./music:/data/music
+		Diagnostico:
+		El problema era la inconsistencia de los datos almacenados en Redis y los ficheros reales, ya que en el directorio /data/music 
+		existian los ficheros pero con otros nombres. Por tanto api encontraba la cancion pero no los ficheros fisicos para reproducirlos
 
-	Concepto de SSOO:
-	Sistemas de ficheros, montaje de volumenes y acceso de ficheros desde contenedores
+		Solucion:
+		Se vacio redis y se reinicio la api para que ejecutara de nuevo el proceso de auto-seed. Este proceso apunta al directorio
+		/data/music y relleno la nueva lista con los ficheros que si existen. Ademas tuvimos que cambiar el volumen en el que estaba montado
+		ya que este era ./music:music y el correcto es ./music:/data/music
 
-E5 — Contenedor API estable
+		Concepto de SSOO:
+		Sistemas de ficheros, montaje de volumenes y acceso de ficheros desde contenedores
 
-	Sintoma:
-	Al revisar los logs de api este aparecia constantemente con el mensaje "killed", lo que impedia que el servicio fuera estable
+	E5 — Contenedor API estable
 
-	Diagnostico:
-	La causa era un limite de memoria demasiado bajo configurado para el contenedor api, ya que su limite eran nada mas 15MB
+		Sintoma:
+		Al revisar los logs de api este aparecia constantemente con el mensaje "killed", lo que impedia que el servicio fuera estable
 
-	Solucion:
-	Se modifico el limite de memoria aumentandolo a 256MB. Despues se volvio a contruir la imagen y reiniciar los servicios
+		Diagnostico:
+		La causa era un limite de memoria demasiado bajo configurado para el contenedor api, ya que su limite eran nada mas 15MB
 
-	Concepto de SSOO:
-	Gestion de memoria y limite de recursos en contenedores
+		Solucion:
+		Se modifico el limite de memoria aumentandolo a 256MB. Despues se volvio a contruir la imagen y reiniciar los servicios
 
-E6 — Imagen no optimizada
+		Concepto de SSOO:
+		Gestion de memoria y limite de recursos en contenedores
 
-	Sintoma:
-	El checker indicaba que la imagen no estaba optimizada pesando 383MB y que el proceso se ejcutaba como root
+	E6 — Imagen no optimizada
 
-	Diagnostico:
-	La causa era el Dockerfile de api, la imagen usaba una imagen demasiada pesada y no especificaba USER, por lo que el proceso
-	se ejecutaba con privilegios de root dentro del contenedor.
+		Sintoma:
+		El checker indicaba que la imagen no estaba optimizada pesando 383MB y que el proceso se ejcutaba como root
 
-	Solucion:
-	Se modifico el Dockerfile de la api para usar node:20-alpine como imagen la cual pesa bastante menos y ejecutar el proceso como
-	el usuario node mediante USER node
+		Diagnostico:
+		La causa era el Dockerfile de api, la imagen usaba una imagen demasiada pesada y no especificaba USER, por lo que el proceso
+		se ejecutaba con privilegios de root dentro del contenedor.
 
-	Concepto de SSOO:
-	Aislamiento de procesos, privilegios, usuarios, permisos y optimizacion de imagenes de contenedores
+		Solucion:
+		Se modifico el Dockerfile de la api para usar node:20-alpine como imagen la cual pesa bastante menos y ejecutar el proceso como
+		el usuario node mediante USER node
 
-E7 — Healthcheck operativo
+		Concepto de SSOO:
+		Aislamiento de procesos, privilegios, usuarios, permisos y optimizacion de imagenes de contenedores
 
-	Sintoma: 
-	Al principio el healthcheck de la api no era operativo ya que la api no se mantenia estable y no podia verificar correctamente la
-	conexion con redis. Por lo tanto el servicio no podia considerarse sano
+	E7 — Healthcheck operativo
 
-	Diagnostico:
-	El /api/health de la api realiza una comprobacion mediante redis.ping(). Por tanto si la api no estaba viva, no podia resolver el servicio
-	db o si fallaba la autenticacion con redis, el healthcheck devolvia error
+		Sintoma: 
+		Al principio el healthcheck de la api no era operativo ya que la api no se mantenia estable y no podia verificar correctamente la
+		conexion con redis. Por lo tanto el servicio no podia considerarse sano
 
-	Solucion:
-	Al corregir la configuracion de la api, aumentando su memoria y configurando correctamente REDIS_PASS, el /api/health empezo a devolver el
-	estado ok
+		Diagnostico:
+		El /api/health de la api realiza una comprobacion mediante redis.ping(). Por tanto si la api no estaba viva, no podia resolver el servicio
+		db o si fallaba la autenticacion con redis, el healthcheck devolvia error
 
-	Concepto de SSOO:
-	Supervision de procesos, comprobacion de disponibilidad y gestion del ciclo de vida de servicios
+		Solucion:
+		Al corregir la configuracion de la api, aumentando su memoria y configurando correctamente REDIS_PASS, el /api/health empezo a devolver el
+		estado ok
 
-E8 — Worker inestable
+		Concepto de SSOO:
+		Supervision de procesos, comprobacion de disponibilidad y gestion del ciclo de vida de servicios
 
-	Sintoma:
-	El checker indicaba que el worker tenia varios reinicios y que era inestable
+	E8 — Worker inestable
 
-	Diagnostico:
-	La causa era un limite de memoria demasiado bajo en el contenedor worker. Se habia configurado con un limite de 10m, la cual era una 
-	cantidad insuficiente y al superar ese limite el proceso era finalizado
+		Sintoma:
+		El checker indicaba que el worker tenia varios reinicios y que era inestable
 
-	Solucion:
-	Se aumento el limite de memoria de 10MB a 128MB en docker-compose.yml. Despues se volvio a contruir y lanzar los contenedores
+		Diagnostico:
+		La causa era un limite de memoria demasiado bajo en el contenedor worker. Se habia configurado con un limite de 10m, la cual era una 
+		cantidad insuficiente y al superar ese limite el proceso era finalizado
 
-	Concepto se SSOO:
-	Gestion de memoria, limite de recuros en contenedores y supervision de procesos
+		Solucion:
+		Se aumento el limite de memoria de 10MB a 128MB en docker-compose.yml. Despues se volvio a contruir y lanzar los contenedores
 
-E9 — Arranque no resiliente
+		Concepto se SSOO:
+		Gestion de memoria, limite de recuros en contenedores y supervision de procesos
 
-	Sintoma:
-	El checker indicaba arranque no resilente. Aunque los servicios arrancaban correctamente, era posible de que api y worker no esperaran 
-	a que redis estuviera preparado antes de intentar conectarse
+	E9 — Arranque no resiliente
 
-	Diagnostico:
-	En docker compose, depends_on solo garantiza el orden de creacion de contenedores, pero no que el servicio dependiente este listo para
-	aceptar conexiones. Por tanto api y worker podian arrancar antes de que db estuviera operativo
+		Sintoma:
+		El checker indicaba arranque no resilente. Aunque los servicios arrancaban correctamente, era posible de que api y worker no esperaran 
+		a que redis estuviera preparado antes de intentar conectarse
 
-	Solucion:
-	Se añadio un healthcheck en db, despues se modificaron los servicios api y worker para depender de db con condicion: service_healthy y 
-	finalmente se recrearon los contenedores
+		Diagnostico:
+		En docker compose, depends_on solo garantiza el orden de creacion de contenedores, pero no que el servicio dependiente este listo para
+		aceptar conexiones. Por tanto api y worker podian arrancar antes de que db estuviera operativo
 
-	Concepto de SSOO:
-	Orquetacion de servicios, dependencias entre procesos, disponiblidad de servicios, healthcheck y orden de arranque
+		Solucion:
+		Se añadio un healthcheck en db, despues se modificaron los servicios api y worker para depender de db con condicion: service_healthy y 
+		finalmente se recrearon los contenedores
+
+		Concepto de SSOO:
+		Orquetacion de servicios, dependencias entre procesos, disponiblidad de servicios, healthcheck y orden de arranque
+
+
+FASE 2 - MEJORA DE LA INFRAESTRUCTURA
+
+	2.1 Optimizacion del Dockerfile
+
+		
