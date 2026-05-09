@@ -151,4 +151,46 @@ FASE 2 - MEJORA DE LA INFRAESTRUCTURA
 
 	2.1 Optimizacion del Dockerfile
 
-		
+		El Dockerfile inicial de la API utilizaba una imagen pesada (node:20) y ejecutaba la aplicacion como usuario root.
+		Esto no es recomendable ya que aumenta el tamaño de la imagen y supone un riesgo de seguridad. Por ello se sustituyo la 
+		imagen base por node:20-alpine .
+
+		Ademas se reorganizo el Dockerfile, primero se copian los archivos package.json y package-lock.json, despues se instalan las
+		dependencias y finalmente se copia el resto del codigo fuente.
+
+		Tambien se configuro el contenedor para ejecutarse con un usuario no privilegiado. En este caso el usuario node, ya incluido
+		en la imagen de Node.
+
+		Se añadio un HEALTHCHECK funcional que consulta el endpoint /api/health de la API. Esto comprueba que la aplicacion esta
+		viva y que pueda comunicarse con Redis.
+
+	2.2 Versionado con Git
+
+		Se inicializo un repositorio Git en el directorio del proyecto ~/spotesify. Tambien se creo un .gitignore para evitar
+		archivos innecesarios como logs, ficheros temporales, informes generados y otros archivos del entorno de desarrollo.
+
+		El uso de Git permitio registrar de forma progresiva las correcciones realizadas durante la practica. Cada error se 
+		documento mediante un commit descriotivo, indicando que se habia arreglado y por que.
+
+	2.3 Automatizacion con Ansible
+
+		Para automatizar el despliegue de SpotESIfy se creo un plyabook de Ansible llamado deploy_spotesify.yml, junto con un 
+		inventario (inventory.ini). El objetivo del playbook es poder dejar la aplicacion funcionando sin tener que ejecutar 
+		manualmente todos los comandos de instalacion y despliegue.
+
+		El playbook instala primero los paquetes necesarios y otros componentes necearios. Despues configura el repositorio de 
+		Docker, instala Docker Engine y el plugin de Docker Compose y asegura que el Docker queda arrancado y habilitado.
+
+		Durante la ejecucion aparecio un conflicto entre paquetes de Docker y paquetes procedentes del repositorio oficial de Docker.
+		docker-compose-v2 y docker-compose-plugin intentaban instalar el mismo binario. Para resolverlo, se añadio una tarea que 
+		elimina paquetes conflictivos antes de instalar los paquetes oficiales de Docker.
+
+		A continuacion, el playbook crea el directorio /opt/spotesify, comprueba que el proyecto origen contiene el archivo 
+		docker-compose.yml y copia los archivos del proyecto. 
+
+		Despues, Ansible ejecuta Docker Compose construyendo las imagenes y levantando los servicios. Por ultimo verifica que la 
+		aplicacion ha arrancado correctamente realizando peticiones HTTP a /api/health y al catalogo /api/songs
+
+		El playbook se diseño para ser idempotente. Puede ejecutarse mas de una vez sin provocar errores ni cambios innecesarios.
+		Al ejecutar el playbook una segunda vez, las tareas que ya estaban en el estado correcto aparecieron como ok y solo se
+		marcaron como changed aquellas que realmente necesitaban actualizar algo.
