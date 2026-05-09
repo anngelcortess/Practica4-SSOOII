@@ -1,0 +1,139 @@
+---
+- name: Desplegar SpotESIfy con Docker Compose
+  hosts: spotesify
+  become: true
+
+  vars:
+    app_name: spotesify
+    app_dir: /opt/spotesify
+    local_project_dir: "{{ playbook_dir | dirname }}"
+    docker_gpg_key: /etc/apt/keyrings/docker.asc
+
+  tasks:
+    - name: Instalar paquetes base necesarios
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - rsync
+          - python3-pip
+        state: present
+        update_cache: true
+
+    - name: Crear directorio para claves APT
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Descargar clave oficial de Docker
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: "{{ docker_gpg_key }}"
+        mode: "0644"
+
+    - name: Obtener arquitectura del sistema
+      ansible.builtin.command: dpkg --print-architecture
+      register: system_arch
+      changed_when: false
+
+    - name: Obtener codename de Ubuntu
+      ansible.builtin.shell: ". /etc/os-release && echo ${UBUNTU_CODENAME:-$VERSION_CODENAME}"
+      register: ubuntu_codename
+      changed_when: false
+
+    - name: Configurar repositorio oficial de Docker
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/docker.sources
+        mode: "0644"
+        content: |
+          Types: deb
+          URIs: https://download.docker.com/linux/ubuntu
+          Suites: {{ ubuntu_codename.stdout }}
+          Components: stable
+          Architectures: {{ system_arch.stdout }}
+          Signed-By: {{ docker_gpg_key }}
+
+    - name: Instalar Docker Engine y Docker Compose plugin
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Asegurar que Docker está arrancado y habilitado
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Crear directorio de despliegue
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ ansible_user_id }}"
+        group: "{{ ansible_user_id }}"
+        mode: "0755"
+        
+    - name: Comprobar que existe docker-compose.yml en el proyecto
+      ansible.builtin.stat:
+        path: "{{ local_project_dir }}/docker-compose.yml"
+      register: compose_origin
+
+    - name: Fallar si no existe docker-compose.yml en origen
+      ansible.builtin.fail:
+        msg: "No se encontró docker-compose.yml en {{ local_project_dir }}"
+      when: not compose_origin.stat.exists
+
+    - name: Copiar proyecto SpotESIfy al servidor
+      ansible.posix.synchronize:
+        src: "{{ local_project_dir }}/"
+        dest: "{{ app_dir }}/"
+        archive: true
+        delete: true
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=ansible"
+          - "--exclude=node_modules"
+          - "--exclude=checker_report.txt"
+          - "--exclude=*.log"
+
+    - name: Ajustar propietario del proyecto desplegado
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        owner: "{{ ansible_user_id }}"
+        group: "{{ ansible_user_id }}"
+        recurse: true
+
+    - name: Construir imagenes y levantar servicios con Docker Compose
+      community.docker.docker_compose_v2:
+        project_src: "{{ app_dir }}"
+        state: present
+        build: policy
+
+    - name: Esperar a que la API responda por healthcheck
+      ansible.builtin.uri:
+        url: http://localhost/api/health
+        method: GET
+        status_code: 200
+      register: api_health
+      retries: 10
+      delay: 3
+      until: api_health.status == 200
+
+    - name: Verificar catalogo de canciones
+      ansible.builtin.uri:
+        url: http://localhost/api/songs
+        method: GET
+        status_code: 200
+        return_content: true
+      register: songs_response
+
+    - name: Mostrar resultado del despliegue
+      ansible.builtin.debug:
+        msg: "SpotESIfy desplegado correctamente. Catalogo accesible en /api/songs."
